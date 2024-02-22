@@ -1,0 +1,1312 @@
+---
+title: "Evidence1_Introduction_to_econometrics"
+author: "Mariana Manzano Rico"
+date: "2023-08-14"
+output: 
+  html_document:
+    toc: TRUE
+    toc_depth: 5
+    toc_float:
+      collapsed: FALSE
+      smooth_scroll: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r, include=FALSE}
+
+#Housekeeping
+rm(list=ls())
+
+#Libraries
+library(dplyr)
+library(forcats)
+library(ggplot2)
+library(naniar)
+library(assertive)
+library(purrr)
+library(stringr)
+library(simputation)
+library(tidyr)
+library(purrr)
+library(tidyverse)
+library(scales)
+library("glmnet")
+library(lmtest)
+library(corrplot)
+library(car)
+
+options(scipen = 999, digits = 3)
+
+#Data base
+near <- read.csv("Evidence_data.csv")
+
+```
+
+# MEXICO AND ITS ATTRACTIVENESS FOR NEARSHORING
+In the last years and after the pandemic, the suspension of activities in one of the most productive countries had several consequences which affected not only multiple productive processes for China but for its main trading partners. (Shih, 2020). 
+
+But not only the pandemic had different effects on the world, also the trade war between China and the United States caused that many american companies decided to close their factories and working centers in the Asian country, as well as in Russia and Ukraine after the conflict between those two countries (BBVA, 2022). 
+
+That is why many countries are looking for new places where to start their businesses (especially manufacturing), a phenomena called nearshoring, which means move factories to cheaper places, considering salaries, fuel, supplies, electricity and taxes.
+
+Many people think Mexico is the perfect place thanks to its proximity with United States and low-cost workforce. So...
+
+### Why Mexico is so special for nearshoring?
+The following are some reasons why our country might be the best option for foreign investment:
+
+* First, its 3,152 kilometers of frontier with the American Country 
+* The different free trade agreements with USA and Canada, which can reduce taxes. 
+* 80% of the industrial productoin in Mexico goes to United States.
+* Its easier to coordinate operations with american partners thanks to the similar time zone.
+* According to the Banco Interamericano de Desarrollo (BID), 78 billion USD each year will be exported from Latin America. 45% of the total will come from Mexico.
+
+(Lázaro, 2022)
+
+### How is it going?
+In the opinion of an analyst from the Barclays Global Bank, nearshoring in Mexico is already felt with the record of foreign direct investment. (Lázaro, 2022). In addition, other sources suggest that the relocation of businesses in our country has been representing an economic growth of 1.4% each year since 2018. After that, no growth was registered. 
+
+However, it is important to understand the different factors that external countries consider when deciding to invest in Mexican territory, so strategies can be created and applied in order to promote nearshoring, the generation of new businesses and the increase of Mexican economy in the following years.
+
+With that in mind, an analysis with Regression Models will be developed to comprehend the impact of different variables in foreign investments, using a database with information registered by different institutions such as the National Institute of Statistics and Geography (INEGI), the Bank of Mexico (Banxico) and the Ministry of Economy (SE, 2023). 
+
+## Our Database "Nearshoring"
+
+Our database is the following one:
+
+```{r, echo=FALSE, results=TRUE}
+
+#Visualize data base
+summary(near)
+#view(near)
+#str(near)
+
+```
+Where y will be the variable named as IED_Flujos since it refers to the foreign investment made through the years. We also have other variables like Education, Insecurity, Innovation, Exchange Rate, among others.
+```{r, include=FALSE}
+
+#Change data type
+  #Empleo
+  #Educación
+  #Innovación
+  #Inseguridad_Homicidio
+  #CO2_Emisiones
+
+near1 <- near%>%
+  mutate(Empleo = as.numeric(Empleo), Educación = as.numeric(Educación), Innovación = as.numeric(Innovación), Inseguridad_Homicidio = as.numeric(Inseguridad_Homicidio), CO2_Emisiones = as.numeric(CO2_Emisiones))
+
+str(near1)
+
+#Missing Data
+  #by median
+  #by mean
+vis_miss(near1)
+
+mean_near<- near1%>%
+  impute_mean_all()
+
+median_near <- near1%>%
+  impute_median_all()
+
+eva_modelos<-bind_rows(mean=mean_near,
+                              median=median_near,
+                              .id="imp_model")
+
+model_summary<-eva_modelos%>%
+  group_by(imp_model)%>%
+  nest()%>%
+  mutate(mod=map(data,          ~lm(IED_Flujos~Empleo + Educación + Innovación + Inseguridad_Homicidio + CO2_Emisiones,
+                     data=.)),
+         res=map(mod, residuals),
+         pred=map(mod, predict),
+         tidy=map(mod, broom::tidy))
+
+eval_summary<-model_summary%>%
+  select(imp_model, tidy)%>%
+  unnest()
+
+eval_summary
+
+#with near
+
+near2 <- near1%>%
+  impute_mean_all()
+
+```
+
+To understand the relationships between variables, we did the following graph.
+
+```{r}
+
+#Relationships
+pairs(near2)
+
+#https://r-charts.com/es/correlacion/pairs/
+
+```
+
+We notice that there are many variables that seems to don't have any relation, while others do. However, at this moment is only important to understand the association with IED_Flujos, so we decided to calculate the correlation between each variable with Y. 
+
+Not all connections were strong, but the ones that had the highest correlation were:
+
+```{r}
+
+#Relationships 2
+year <- cor(near2$Año, near1$IED_Flujos) #0.72
+year
+#cor(near2$Exportaciones, near1$IED_Flujos) #0.661
+#cor(near2$Empleo, near1$IED_Flujos) #-0.041
+education <- cor(near2$Educación, near1$IED_Flujos) #0.724
+education
+#cor(near2$Salario_Diario, near1$IED_Flujos) #0.555
+#cor(near2$Innovación, near1$IED_Flujos) #0.535
+#cor(near2$Inseguridad_Robo, near1$IED_Flujos) #-0.55
+#cor(near2$Inseguridad_Homicidio, near1$IED_Flujos) #0.397
+#cor(near2$Tipo_de_Cambio, near1$IED_Flujos) #0.603
+#cor(near2$Densidad_Carretera, near1$IED_Flujos) #0.692
+population_density <- cor(near2$Densidad_Población, near1$IED_Flujos) #0.719
+population_density
+#cor(near2$CO2_Emisiones, near1$IED_Flujos) #0.096
+GDP <- cor(near2$PIB_Per_Cápita, near1$IED_Flujos) #0.734
+GDP
+INPC <- cor(near2$INPC, near1$IED_Flujos) #0.705
+INPC
+
+#USE
+  #Año
+  #Educación
+  #Densidad_poblacional
+  #PIB_Per_capita
+  #INPC
+
+```
+This factors mean: 
+
+* Year: Time.
+* Education: Average Years of Education.  
+* Population Density: The number of population divided by the territorial extension of Mexico in km2.
+* GDP: Gross Domestic Product (GDP) divided by population. Value adjusted by 2013 prices. 
+* INPC: National Consumer Price Index (NCPI). Base 2018 = 100. 
+
+With this components we will construct our models and then decide which one is the best one:
+
+## Creation of the models
+
+### Simple Linear Regression
+
+**1st Model, Year and Investment**
+
+Our first model was created to observe how external investment has been developing through time.
+```{r}
+
+#Simple Linear Regression Model
+  #Año
+cor(near2$Año, near1$IED_Flujos)
+
+ModSimple1 <- lm(near1$IED_Flujos~near2$Año)
+summary(ModSimple1)
+
+```
+
+First, we see a high correlation compared to others in our first tries. Then we see that both (the intercept and the variable) are significant for our models, and the model as well is significant. However, we notice a low Adjusted R-squared, this value tells us that only 50% of the investment is explained by the years.
+
+```{r}
+
+plot(near2$Año, near1$IED_Flujos, xlab="Year",ylab="Foreign Investment Flows")+
+abline(ModSimple1,col="Red")
+
+```
+
+Our graph illustrates that there is a trend in this variable, however, is not precise enough for our model.
+
+```{r}
+
+shapiro.test(rstandard(ModSimple1)) 
+
+AIC(ModSimple1)
+BIC(ModSimple1)
+
+```
+
+On the other hand, we observe a significant p-value in our Shapiro's test, which is good. In addition, the tools BIC and AIC gives us those two numbers which will be compared with the next models. 
+
+**2nd Model, GDP and Investment**
+
+Our second model evaluates de relationship between GDP and investment flows. FIrst we have the following correlation:
+
+```{r}
+
+#Simple Linear Regression Model
+  #PIB_Per_Cápita
+cor(near2$PIB_Per_Cápita, near1$IED_Flujos) #0.734
+
+```
+
+Which means that it is strong but it can be better. On the other hand, our model is:
+
+```{r}
+
+ModSimple2 <- lm(near1$IED_Flujos~near2$PIB_Per_Cápita)
+summary(ModSimple2)
+
+```
+
+As we can see, both variables are significant, our model is significant as well, but only 51% of our model explains the behavior of y, which is not a great percentage. 
+
+```{r}
+
+plot(near2$PIB_Per_Cápita, near1$IED_Flujos, xlab="GDP",ylab="Foreign Investment Flows")+
+abline(ModSimple2,col="Red")
+
+```
+
+In our graph, we see again that there is a trend between variables, but not as precise as we wanted.
+
+Additionally, our evaluation methods indicates the following values:
+
+```{r}
+
+shapiro.test(rstandard(ModSimple2)) 
+
+```
+
+First, our Shapiro's test says has not a significant p-value which is good. Also our BIC and AIC have lower values than our last model, which again, is good.
+
+```{r}
+
+AIC(ModSimple2)
+BIC(ModSimple2)
+
+```
+
+**3rd Model, Education and Investment**
+
+Other model we tried was with Education and Investment, since it throws us a correlation of: 
+```{r}
+
+#Simple Linear Regression Model
+  #Educación
+cor(near2$Educación, near1$IED_Flujos) #0.734
+
+```
+
+That is why, we decided to build the following model:
+
+```{r}
+
+ModSimple3 <- lm(near1$IED_Flujos~near2$Educación)
+summary(ModSimple3)
+
+```
+
+We see in this part that the Intercept (the value that y might have if x is 0), is not as significant as the variable education, but it is the enough for our model. Also we see a significant p-value but again, according to our Adjusted R-squared, only 50% of the y values can be explained with this model, that means that only 50% of the investment flows in Mexico are thanks to the levels of education.
+
+```{r}
+
+plot(near2$Educación, near1$IED_Flujos, xlab="Education",ylab="Foreign Investment Flows")+
+abline(ModSimple3,col="Red")
+
+```
+
+The graph shows this trend but as our Adjusted R-squared explains, is not accurate enough.
+
+```{r}
+
+shapiro.test(rstandard(ModSimple3)) 
+
+AIC(ModSimple3)
+BIC(ModSimple3)
+
+```
+
+Finally, the Shapiro's Test indicates it is a functional model but our AIC and BIC are not better compared to the other ones.
+
+**4th Model, Population Density and Investment**
+
+The following method using Population Density and Investment Flows presents a correlation of:
+
+```{r}
+
+#Simple Linear Regression Model
+  #Densidad Poblacional
+cor(near2$Densidad_Población, near1$IED_Flujos)
+
+```
+
+With this in mind, our model seems like:
+
+```{r}
+
+ModSimple4 <- lm(near1$IED_Flujos~near2$Densidad_Población)
+summary(ModSimple4)
+
+```
+
+With both (the intercept and the variable) significant and a p-value also significant, our model is not one of the best ones thanks to its low Adjusted R-squared of 49%.
+
+```{r}
+
+plot(near2$Densidad_Población, near1$IED_Flujos, xlab="Population Density",ylab="Foreign Investment Flows")+
+abline(ModSimple4,col="Red")
+
+```
+
+This also can be noticed in the image where again, is not exact enough.
+
+```{r}
+
+shapiro.test(rstandard(ModSimple4)) 
+
+AIC(ModSimple4)
+BIC(ModSimple4)
+
+```
+
+Our criteria tells us that this model has distributed data which is good, while our BIC and AIC are almost the same than the others.
+
+**5th Model, INPC and Investment**
+
+Our final model was with INPC with a correlation of:
+
+```{r}
+
+#Simple Linear Regression Model
+  #INPC
+cor(near2$INPC, near1$IED_Flujos)
+
+```
+
+Then, our model indicates that the intercept is not significant but the p-value is and the behavior of y is 47% explained by the behavior of x.
+
+```{r}
+
+ModSimple5 <- lm(near1$IED_Flujos~near2$INPC)
+summary(ModSimple5)
+
+```
+In our graph we see almost the same situation, a trend but not the accuracy of the data.
+```{r}
+
+plot(near2$INPC, near1$IED_Flujos, xlab="INPC",ylab="Foreign Investment Flows")+
+abline(ModSimple5,col="Red")
+
+shapiro.test(rstandard(ModSimple5)) 
+
+AIC(ModSimple5)
+BIC(ModSimple5)
+
+```
+
+Finally, the p-value in the Shapiro test is non-significant (our data is well distributed), but AIC and BIC are higher than the other models.
+
+### Multiple Linear Regression
+
+Then we looked for Multiple Linear Regression that may help us to explain which are the factors that other countries take into consideration when they look for the best option to finance. Our models are the following ones:
+
+**1st Model, all variables**
+
+Our first model takes all the available variables to construct our model. This one has the following statistics:
+
+```{r}
+
+#Multiple Linear Regression using all variables
+  #Año
+  #Exportaciones
+  #Empleo
+  #Educación
+  #Salario_Diario
+  #Innovación
+  #Inseguridad_Robo
+  #Inseguridad_Homicidio
+  #Tipo_de_Cambio
+  #Densidad_Carretera
+  #Densidad_Población
+  #CO2_Emisiones
+  #PIB_Per_Cápita
+  #INPC
+
+ModMulti1 <- lm(near2$IED_Flujos~near2$Año+near2$Exportaciones+near2$Empleo+near2$Educación+near2$Salario_Diario+near2$Innovación+near2$Inseguridad_Robo+near2$Inseguridad_Homicidio+near2$Tipo_de_Cambio+near2$Densidad_Carretera+near2$Densidad_Población+near2$CO2_Emisiones+near2$PIB_Per_Cápita+near2$INPC)
+summary(ModMulti1)
+
+```
+
+Here we see that our model is significant and explains the 78% of the data points in y (of the investment). However, only a few factors are significant in our model: 
+
+* Year
+* Exports
+* Employment
+* Innovation
+* Exchange rate
+
+```{r}
+
+qqnorm(rstandard(ModMulti1))
+qqline(rstandard(ModMulti1), col = "blue")
+
+```
+
+In our graph we see that data is more precise but not in its totality.
+
+```{r}
+
+shapiro.test(rstandard(ModMulti1)) 
+
+AIC(ModMulti1)
+BIC(ModMulti1)
+
+```
+
+However, the Shapiro Test stipulate that data is well distributed and the AIC and BIC have lower values that the ones seen before.
+
+**2nd Model, significant variables in our last model**
+
+As we mentioned, only a few factors were significant in our first model, so we decided to choose those to create a new model. To remember which ones where selected, here they are:
+
+* Year
+* Exports
+* Employment
+* Innovation
+* Exchange rate
+
+```{r}
+
+# 2nd Multiple Linear Regression
+  #Año
+  #Exportaciones
+  #Empleo
+  #Innovación
+  #Tipo_de_Cambio
+
+ModMulti2 <- lm(near2$IED_Flujos~near2$Año+near2$Exportaciones+near2$Empleo+near2$Innovación+near2$Tipo_de_Cambio)
+summary(ModMulti2)
+
+```
+
+In this case, we see that only Year and Exchange Rate are significant, so this ones will be used in our next model. In this one, we also see that the model is significant and that it explains 67% of the behavior of investment flows in Mexico.
+
+```{r}
+
+qqnorm(rstandard(ModMulti2))
+qqline(rstandard(ModMulti2), col = "blue")
+
+```
+
+This also can be seen in our chart, which there are many data points really far from the tendency (at least more than in the last model).
+
+```{r}
+
+shapiro.test(rstandard(ModMulti2)) 
+
+AIC(ModMulti2)
+BIC(ModMulti2)
+
+```
+
+The Shapiro test tells us that in this case, and because p-value is significant, our data is not well distributed, so this model does not works at all. Also, AIC and BIC are not as good as the other one.
+
+**3rd Model, Year and Exchange Rate**
+
+As we said before, we used our significant variables in our last model to create a new one which were Year and Exchange Rate.
+
+```{r}
+
+# 3rd Multiple Linear Regression
+  #Año
+  #Tipo_de_Cambio
+
+ModMulti3 <- lm(near2$IED_Flujos~near2$Año+near2$Tipo_de_Cambio)
+summary(ModMulti3)
+
+```
+
+However, we can see that this is not a good model compared with the other ones thus it has a lower Adjusted R-squared, only 53% of our data is explained with our model, but other models explains at most 78% of our data.
+
+```{r}
+
+qqnorm(rstandard(ModMulti3))
+qqline(rstandard(ModMulti3), col = "blue")
+
+```
+
+The graph illustrates how this behavior is seen, we can see that are some outliers that do not fit in the model.
+
+Finally, the Shapiro Test tells us that data normally dispersed but, again, AIC and BIC does not present the best values.
+
+```{r}
+
+shapiro.test(rstandard(ModMulti3)) 
+
+AIC(ModMulti3)
+BIC(ModMulti3)
+
+```
+
+**4th Model, going back to a few models**
+
+Because our 3rd model did not present good results, we decided to go back to the first one and only select those variables that where significant and other ones with a low p-value. The list of the variables is the following one:
+
+* Year
+* Exports
+* Employment
+* Education
+* Daily Wage
+* Innovation
+* Insecurity on robberies
+* Homicide insecurity
+* Exchange rate
+* Population density
+
+Our model is:
+
+```{r}
+
+# 4th Multiple Linear Regression
+  #Año
+  #Exportaciones
+  #Empleo
+  #Educación
+  #Salario_Diario
+  #Innovación
+  #Inseguridad_Robo
+  #Inseguridad_Homicidio
+  #Tipo_de_Cambio
+  #Densidad_Población
+
+ModMulti4 <- lm(near2$IED_Flujos~near2$Año+near2$Exportaciones+near2$Empleo+near2$Educación+near2$Salario_Diario+near2$Innovación+near2$Inseguridad_Robo+near2$Inseguridad_Homicidio+near2$Tipo_de_Cambio+near2$Densidad_Población)
+summary(ModMulti4)
+
+```
+
+We see that in this case, Daily wage, Insecurity in robberies and Homicide insecurity are not significant, but our model is and it has the highest percentage of explanation of y (82%).
+
+```{r}
+
+qqnorm(rstandard(ModMulti4))
+qqline(rstandard(ModMulti4), col = "blue")
+
+```
+
+We see again that there are some outliers, but there is a trend in our data points.
+
+```{r}
+
+shapiro.test(rstandard(ModMulti4))
+
+AIC(ModMulti4)
+BIC(ModMulti4)
+
+```
+
+The Shapiro Test speculates that data is well disperse, while AIC and BIC have good values in comparison with other models.
+
+**5th Model, Year and Exchange Rate**
+
+Because in our last model we have some insignificant factors, we decided to take them away (except for Daily wage because it hast the lowest p-value of those three) and keep only those which were significant:
+
+* Year
+* Exports
+* Employment
+* Education
+* Daily wage
+* Innovation
+* Exchange rate
+* Population density
+
+```{r}
+
+# 5th Multiple Linear Regression
+  #Año
+  #Exportaciones
+  #Empleo
+  #Educación
+  #Salario_Diario
+  #Innovación
+  #Tipo_de_Cambio
+  #Densidad_Población
+
+ModMulti5 <- lm(near2$IED_Flujos~near2$Año+near2$Exportaciones+near2$Empleo+near2$Educación+near2$Salario_Diario+near2$Innovación+near2$Tipo_de_Cambio+near2$Densidad_Población)
+summary(ModMulti5)
+
+```
+
+With these variables, we have that 78% of data can be explained by the model, and that Employment, Education and Daily wage are not significant.
+
+```{r}
+
+qqnorm(rstandard(ModMulti5))
+qqline(rstandard(ModMulti5), col = "blue")
+
+```
+
+On the image we can see how this data is visualized and that there are some outliers.
+
+```{r}
+
+shapiro.test(rstandard(ModMulti5)) 
+
+AIC(ModMulti5)
+BIC(ModMulti5)
+
+```
+
+Finally, the Shapiro Test indicates that the information is well distributed and AIC and BIC have good scores but are not the best ones seen.
+
+### Polynomial Linear Regression
+
+Other method seen to look for relationships between investment and other variables is the Polynomial Linear Regression.
+
+**1st Model, variables with lowest p-values**
+
+For our first model, we used those factors with the lowest p-values with no order.
+
+```{r}
+
+# 1st Polynomial Linear Regression
+  #Año
+  #Exportaciones
+  #Empleo
+  #Educación
+  #Salario_Diario
+  #Innovación
+  #Inseguridad_Robo
+  #Inseguridad_Homicidio
+  #Tipo_de_Cambio
+  #Densidad_Población
+
+ModPol1 <- lm(near2$IED_Flujos~near2$Año+I(near2$Exportaciones^2)+I(near2$Empleo^3)+I(near2$Educación^4)+I(near2$Salario_Diario^5)+I(near2$Innovación^6)+I(near2$Inseguridad_Robo^7)+I(near2$Inseguridad_Homicidio^8)+I(near2$Tipo_de_Cambio^9)+I(near2$Densidad_Población^10))
+summary(ModPol1)
+
+```
+
+We saw that any variable was significant in this model, even if the model is. The Adjusted R-squared says it explains 56% of the data. With this information, we can infer this is not a good model.
+
+```{r}
+
+qqnorm(rstandard(ModPol1))
+qqline(rstandard(ModPol1), col = "orange")
+
+```
+
+The image illustrates how data is distributed with this model and that there are some outliers.
+
+```{r}
+
+shapiro.test(rstandard(ModPol1)) 
+
+AIC(ModPol1)
+BIC(ModPol1)
+
+```
+
+We confirm what we supposed, this is not a good model because data is not well dispersed and AIC and BIC presents the highest values at the moment. 
+
+**2nd Model, in order**
+
+However, we decided to order this variables according to its p-values in the first multiple linear model, from the highest to the lowest. This is the order:
+
+* Homicide insecurity
+* Insecurity in robberies
+* Daily wage
+* Education
+* Employment
+* Innovation
+* Population Density
+* Exports
+* Exchange rate
+* Year
+
+The model is:
+
+```{r}
+
+# 2nd Polynomial Linear Regression (In)
+  #Año
+  #Tipo_de_Cambio
+  #Exportaciones
+  #Densidad_Población
+  #Innovación
+  #Empleo
+  #Educación
+  #Salario_Diario
+  #Inseguridad_Robo
+  #Inseguridad_Homicidio
+
+ModPol2 <- lm(near2$IED_Flujos~near2$Inseguridad_Homicidio+I(near2$Inseguridad_Robo^2)+I(near2$Salario_Diario^3)+I(near2$Educación^4)+I(near2$Empleo^5)+I(near2$Innovación^6)+I(near2$Densidad_Población^7)+I(near2$Exportaciones^8)+I(near2$Tipo_de_Cambio^9)+I(near2$Año^10))
+summary(ModPol2)
+
+```
+
+We can see that Employment, Population density and Year are the most significant factors but not with a 95% of confidence. However, the model is significant and the Adjusted R-squared of 0.64 means that 64% of the investment flows are explained with this model.
+
+In the graph we see a trend but some outliers in this line.
+```{r}
+
+qqnorm(rstandard(ModPol2))
+qqline(rstandard(ModPol2), col = "orange")
+
+```
+
+In addition, the data is well distributed, but again the AIC and BIC do not have the best scores.
+
+```{r}
+
+shapiro.test(rstandard(ModPol2)) 
+
+AIC(ModPol2)
+BIC(ModPol2)
+
+```
+
+**3rd Model, in other order**
+
+Finally, we decided to use these same variables but with the opposite order which is:
+
+* Year
+* Exchange rate
+* Exports
+* Population Density
+* Innovation
+* Employment
+* Education
+* Daily wage
+* Insecurity in robberies
+* Homicide insecurity
+
+This model explains 67% of the behavior of the investment, is significant but not all variables are. In general, we see almost the same values than in the last one.
+
+```{r}
+
+# 3rd Polynomial Linear Regression (In)
+  #Año
+  #Tipo_de_Cambio
+  #Exportaciones
+  #Densidad_Población
+  #Innovación
+  #Empleo
+  #Educación
+  #Salario_Diario
+  #Inseguridad_Robo
+  #Inseguridad_Homicidio
+
+ModPol3 <- lm(near2$IED_Flujos~near2$Año+I(near2$Tipo_de_Cambio^2)+I(near2$Exportaciones^3)+I(near2$Densidad_Población^4)+I(near2$Innovación^5)+I(near2$Empleo^6)+I(near2$Educación^7)+I(near2$Salario_Diario^8)+I(near2$Inseguridad_Robo^9)+I(near2$Inseguridad_Homicidio^10))
+summary(ModPol3)
+
+```
+
+Again, we see in our chart a trend but with some outleirs.
+
+```{r}
+
+qqnorm(rstandard(ModPol3))
+qqline(rstandard(ModPol3), col = "orange")
+
+```
+
+Additionally, we have a good data dispersion, and AIC and BIC are not good enough compared with other models.
+
+```{r}
+
+shapiro.test(rstandard(ModPol3)) 
+
+AIC(ModPol3)
+BIC(ModPol3)
+
+```
+
+### Other methods for Regression
+
+**LASSO**
+
+We also tried the LASSO model to look for a better model to our data.
+
+```{r}
+
+#LASSO.
+#Extraction of the model 
+x_vars <- model.matrix(IED_Flujos~. , near2)[,-1]
+summary(x_vars)
+y_var <- near2$IED_Flujos
+y_var
+lambda_seq <- 10^seq(2, -2, by = -.1)
+
+```
+
+First, we established which variables will be the independent (x) and which others the dependent (y). In this moment we know that IED_Flujos is our dependent variable. We also established lambda values.
+
+Then we separate a sample of the data to create our model.
+
+```{r}
+
+set.seed(90)
+training = sample(1:nrow(x_vars), nrow(x_vars)/2)
+x_test = (-training)
+y_test = y_var[x_test]
+cv_output <- cv.glmnet(x_vars[training,], y_var[training],
+                       alpha = 1, lambda = lambda_seq, 
+                       nfolds = 5)
+
+plot(cv_output)
+plot(cv_output$lambda,type='l')
+
+```
+
+Then we plot our data. The first graph tells us that, according to the LASSO method, we will only use 7 variables to explain the behavior of y.
+
+We also calculate the best value for lambda, which has a value of 100 and create a model with this number.
+
+```{r}
+
+# How to get the best lambda
+best_lam <- cv_output$lambda.min
+best_lam
+
+#cor(X)
+
+# Recalculating the model with the best lambda
+lasso_best <- glmnet(x_vars[training,], y_var[training], alpha = 1, lambda = best_lam)
+pred <- predict(lasso_best, s = best_lam, newx = x_vars[x_test,])
+
+```
+
+
+
+```{r}
+#In order to compare (a similar method)
+elmodelo<- glmnet(x_vars[training,], y_var[training], alpha = 1, lambda = 0)
+predelmodelo <- predict(elmodelo,s=0,newx=x_vars[x_test,])
+
+#Let us compare to our linear model's result:
+elmodelo2 <- lm(y_var~x_vars)
+summary(elmodelo2)
+
+```
+Then we compare it with another model, which has 79% as Adjusted R-squared, is significant and the important variables are Year, Exports, Employment, Innovation and Exchange Rate. 
+
+We can see how this data behaves in the following tables. The first one shows us the model using the best value for lamda and the other one the model that helped us to compare.
+
+```{r}
+
+final <- cbind(y_test, pred)
+finalelmodelo <- cbind(y_test,predelmodelo)
+
+# Checking the first observations.
+head(final)
+head(finalelmodelo)
+
+```
+
+Finally, we calculated the Adjusted R-squared which has a low percentage (55%).
+
+```{r}
+
+#To calculate r^2 fro LASSO
+actual <- y_test
+preds <- pred
+rss <- sum((preds - actual) ^ 2)
+tss <- sum((actual - mean(actual)) ^ 2)
+rsq <- 1 - rss/tss
+rsq
+
+```
+An the coefficients of the models, the one of the best LASSO and the one to compare, respectively.
+
+```{r}
+
+# Getting the coefficients:
+coef(lasso_best)
+coef(elmodelo)
+```
+
+As we can see, our model just takes 7 variables (the LASSO), the other ones are penalized with a 0 value of coefficient. The other one takes all variables and gives them different values for the coefficient.
+
+**Ridge**
+
+We also tried the Ridge method. Our data was already prepared for LASSO, so we will skip this part.
+
+```{r}
+
+#Ridge
+
+# We break the dataset in training set and test set
+set.seed(90)
+entrenamiento = sample(1:nrow(x_vars), nrow(x_vars)/2)
+x_test = (-entrenamiento)
+y_test = y_var[x_test]
+
+###Let us do Ridge First
+cv_outRi <- cv.glmnet(x_vars[entrenamiento,], y_var[entrenamiento],
+                       alpha = 0, lambda = lambda_seq, 
+                       nfolds = 5)
+plot(cv_outRi)
+
+```
+
+In this graph, we see the behavior of our sample, the bias and variability. We can see that it says that 14 variables will be used (we have a total of 14 columns), because in this method we do not penalize any factor, we only give them lower values.
+
+We also calculate the best lambda (100) and do the corresponding estimates.
+
+```{r}
+
+# Best lambda
+Ribest_lam <- cv_outRi$lambda.min
+Ribest_lam
+
+# Recalculating the model with the best lambda
+ridgeswiss_best <- glmnet(x_vars[entrenamiento,], y_var[entrenamiento], alpha = 0, lambda = Ribest_lam)
+predRi <- predict(ridgeswiss_best, s = Ribest_lam, newx = x_vars[x_test,])
+
+```
+
+First, we see an Adjusted R-squared of 0.43 and the following coefficients:
+```{r}
+#Calculate the r^2
+actual <- y_test
+preds <- predRi
+rss <- sum((preds - actual) ^ 2)
+tss <- sum((actual - mean(actual)) ^ 2)
+rsq <- 1 - rss/tss
+rsq
+
+coef(ridgeswiss_best)
+
+```
+
+## Evaluation of the models
+
+At this point, we have 13 models with different structures.Our criterion to select the three best models are:
+
+* Adjusted R-squared
+* Shapiro Test
+* P-value (level of significance)
+* BIC
+* AIC
+
+To make a brief summary, we present the following table:
+
+
+![Comparison of the models](Evaluation.png)
+
+First, we selected the 3 highest values of Adjusted R-squared, then the highest in AIC and in BIC. We reject those models with a P-value in the Shapiro Test lower than 0.05 because this means that model does not have a well distributed data. Additionally, all models were significant. With this in mind, we selected:
+
+* 1st Multiple Linear Regression
+* 4th Multiple Linear Regression
+* 5th Multiple Linear Regression
+
+We will use some evaluation methods to conclude if these models are good enough for our data:
+
+* Multicollinearity
+* Homoscedasticity
+  * Breusch - Pagan Test.
+  * White Test.
+  * Score Test for non-constant error Variance.
+* The normality and behavior of the errors
+
+**1st Model Evaluation**
+
+First we do the evaluation for the first multiple model. 
+
+*Multicollinearity* 
+
+We did the calculation of the coefficients for each variable, but these are a lot of numbers, so a graph might be a better option:
+
+```{r}
+
+#We choose the best 3 models
+  #ModMulti1
+  #ModMulti4
+  #ModMulti5
+
+#ModMulti1 (All variables)
+
+#Correlation matrix
+near2 %>% cor(method="pearson") %>% round(digits=2) -> near2_cor
+
+#Graph
+corrplot(near2_cor, type="upper", order="hclust", tl.col="black", tl.srt=90)
+
+```
+
+We notice that there is a lot of Multicollinearity between variables, which is not good for our model. This is also affirmed by the VIF estimation, which indicates us Variance Inflation Factor.
+
+```{r}
+
+#With VIF
+vif(ModMulti1)
+
+#Just use
+  #Empleo 
+  #Innovación
+
+```
+
+Here we see that only Employment and Innovation are variables that have no relation with y (this because they are equal or lower than 10). This means that only this variables can be used for our model (all the others do not have to be used at the same time) or that we can reduce this Multicollinearity with LASSO or Ridge.
+
+*Homoscedasticity*
+
+With Homoscedasticity we can refer to the phenomenon where the variance of predicted to observed values is constant. The tests made to evaluate this aspect must speculates a not significant value (above 0.05).
+
+The first test is the Breusch-pagan test, which has the following results:
+
+```{r}
+
+#Homoscedasticity:
+#The breusch-pagan test
+bptest(ModMulti1)
+
+```
+
+Then the white test:
+
+```{r}
+
+#The white test
+bptest(ModMulti1, varformula = ~ near2$Año * near2$Exportaciones * near2$Empleo * near2$Educación * near2$Salario_Diario * near2$Innovación * near2$Inseguridad_Robo * near2$Inseguridad_Homicidio * near2$Tipo_de_Cambio * near2$Densidad_Carretera * near2$Densidad_Población * near2$CO2_Emisiones * near2$PIB_Per_Cápita * near2$INPC + I(near2$Año^2)+I(near2$Exportaciones^2)+I(near2$Empleo^2)+I(near2$Educación^2)+I(near2$Salario_Diario^2)+I(near2$Innovación^2)+I(near2$Inseguridad_Robo^2)+I(near2$Inseguridad_Homicidio^2)+I(near2$Tipo_de_Cambio^2)+I(near2$Densidad_Población^2)+I(near2$Densidad_Carretera^2)+I(near2$CO2_Emisiones^2)+I(near2$PIB_Per_Cápita^2)+I(near2$INPC^2))
+
+```
+
+And finally the Score test for the non-constant variance:
+
+```{r}
+
+#Score test for the non constant variance
+ncvTest(ModMulti1)
+
+```
+
+In the three cases we have non-significant values which is good, we have Homoscedasticity.
+
+*The normality and behavior of the errors*
+
+As our last criterion, we have the behavior of the errors, the closest it is to 0, the better it can be.
+
+```{r}
+
+#Mean of the errors
+mean(ModMulti1$residuals)
+
+```
+
+This is really close to 0, which is good for our model.
+
+**4th Model Evaluation**
+
+Then we have the evaluation for the 4th Multiple Linear Model. 
+
+*Multicollinearity* 
+
+```{r}
+
+#ModMulti4
+  #Año
+  #Exportaciones
+  #Empleo
+  #Educación
+  #Salario_Diario
+  #Innovación
+  #Inseguridad_Robo
+  #Inseguridad_Homicidio
+  #Tipo_de_Cambio
+  #Densidad_Población
+
+#New data set with only those variables
+data4 <- near2%>%
+  select(Año, Exportaciones,Empleo, Educación, Salario_Diario, Innovación, Inseguridad_Robo, Inseguridad_Homicidio, Tipo_de_Cambio, Densidad_Población)
+
+#Correlation matrix
+data4 %>% cor(method="pearson") %>% round(digits=2) -> data4_cor
+
+#Graph
+corrplot(data4_cor, type="upper", order="hclust", tl.col="black", tl.srt=90)
+
+```
+
+In this graph we see that almost all variables have Multicollinearity except for Employment and Innovation (again). This is confirmed by the VIF calculation:
+
+```{r}
+
+#With VIF
+vif(ModMulti4)
+
+#Just use
+  #Inseguridad_Homicidio
+  #Empleo
+  #Innovación
+
+```
+
+We notice that also Insecurity of robberies can be used in the same model with the two factors mentioned above. However, the other variables are not recommended to be used in the same model because of Multicollinearity and have to be fixed with a LASSO or Ridge method.
+
+*Homoscedasticity*
+
+On the other hand, we apply the three tests for Homoscedasticity. First we start with the Breusch-pagan test:
+
+```{r}
+
+#Homoscedasticity:
+#The breusch-pagan test
+bptest(ModMulti4)
+
+```
+
+Then the White test:
+
+```{r}
+
+#The white test
+bptest(ModMulti4, varformula = ~ near2$Año * near2$Exportaciones * near2$Empleo * near2$Educación * near2$Salario_Diario * near2$Innovación * near2$Inseguridad_Robo * near2$Inseguridad_Homicidio * near2$Tipo_de_Cambio * near2$Densidad_Población + I(near2$Año^2)+I(near2$Exportaciones^2)+I(near2$Empleo^2)+I(near2$Educación^2)+I(near2$Salario_Diario^2)+I(near2$Innovación^2)+I(near2$Inseguridad_Robo^2)+I(near2$Inseguridad_Homicidio^2)+I(near2$Tipo_de_Cambio^2)+I(near2$Densidad_Población^2))
+
+```
+
+And finally the Score test for the non constant variance:
+
+```{r}
+
+#Score test for the non constant variance
+ncvTest(ModMulti4)
+
+```
+
+In the three cases is presented a non-significant p-value, so it is a good result for our model.
+
+*The normality and behavior of the errors*
+
+We finish with the behavior of the errors in our model by calculating the mean of the errors which have to be almost equal to 0.
+
+```{r}
+
+#Mean of the errors
+mean(ModMulti4$residuals)
+
+```
+
+This is a good result for the 4th Multiple Linear Model.
+
+**5th Model Evaluation**
+
+We end with the evaluation of the 5th Multiple Linear Model with the same criterion.
+
+*Multicollinearity* 
+
+
+```{r}
+
+#ModMulti5
+  #Año
+  #Exportaciones
+  #Empleo
+  #Educación
+  #Salario_Diario
+  #Innovación
+  #Tipo_de_Cambio
+  #Densidad_Población
+
+data5 <- near2%>%
+  select(Año, Exportaciones, Empleo, Educación, Salario_Diario, Innovación, Tipo_de_Cambio, Densidad_Población)
+
+#Correlation matrix
+data5 %>% cor(method="pearson") %>% round(digits=2) -> data5_cor
+
+#Graph
+corrplot(data5_cor, type="upper", order="hclust", tl.col="black", tl.srt=90)
+
+```
+
+First we do this by graphing the correlation between variables. The image above illustrates this. Again, Employment and Innovation are factors with no Multicollinearity.
+
+```{r}
+
+vif(ModMulti5)
+#Just use
+  #Empleo
+  #Innovación
+
+```
+
+And the VIF estimation corroborates this with a score of 2.29 for Employment and 1.58 for Innovation. The other variables can be treated with the LASSO or Ridge method.
+
+*Homoscedasticity*
+
+We also try the three tests for this model. The Breusch-Pagan indicates the following information:
+
+```{r}
+
+#Homoscedasticity:
+#The breusch-pagan test
+bptest(ModMulti5)
+
+```
+
+The White test speculates the following:
+
+```{r}
+
+#The white test
+bptest(ModMulti5, varformula = ~ near2$Año * near2$Exportaciones * near2$Empleo * near2$Educación * near2$Salario_Diario * near2$Innovación * near2$Tipo_de_Cambio * near2$Densidad_Población + I(near2$Año^2)+I(near2$Exportaciones^2)+I(near2$Empleo^2)+I(near2$Educación^2)+I(near2$Salario_Diario^2)+I(near2$Innovación^2)+I(near2$Tipo_de_Cambio^2)+I(near2$Densidad_Población^2))
+
+```
+
+And the Score test for the non constant variance tells us these estimations:
+
+```{r}
+
+#Score test for the non constant variance
+ncvTest(ModMulti5)
+
+```
+
+The White test and the Score test for the non constant variance are above 0.05, which is good. However, the Breusch-pagan test is equal to this value. This is good because it is not lower than, but it could mean that the estimated variance of the residuals of the regression depend on the values of the x variables.
+
+*The normality and behavior of the errors*
+
+Finally, we applied the mean function to calculate the average of the errors in the model.
+
+```{r}
+
+#Mean of the errors
+mean(ModMulti5$residuals)
+
+```
+
+This value is close to 0, so it is good for our model.
+
+## Conclusion
+
+**Which is the best model to predict the effect of nearshoring in Mexico?**
+
+After completing this whole analysis and evaluating which are the best models, we conclude that the best one is the 5th Multiple Linear Regression Model, which has an equation of: 
+
+*-25055259.671+(12656.140Year)+(-1.965Exports)+(3080.346Employment)+(-7423.193Education)+(-126.519Daily wage)+(2324.721Innovation)+(-3028.813Exchange rate)+(-9047.235Population Density)*
+
+This thanks to its high Adjusted R-squared of 78%, BIC of 528, AIC of 515, with low multicollinearity, because it has homoscedasticity and its lowest error's mean. That is why, this variables must be treated in Mexico in order to increase foreign investment in our country.
+
+**What areas of opportunity has Mexico in order to increase foreign investment?**
+
+The factors that should be considered to increase external investing are the ones used in our model:
+
+* Year
+* Exports
+* Employment
+* Education
+* Daily wage
+* Innovation
+* Exchange Rate
+* Population Density
+
+However, there are some factors that have a bigger impact in the decision making of external entrepreneurship (these ones were selected according to its level of significance in our model), which are:
+
+* Year: We cannot do anything with this variable but take advantage of time to improve other factors.
+* Exports: Promote the exports of different industries (the data presented do not cover petroleum, but textile companies). 
+* Innovation: Promote innovation in processes, products, marketing, digital transformation, technology, etc. This by creating programs and activities (in school or outside of it) that boost creativity, imagination, the creation of new things and problem solving. It is also important to inform about the register of patents.
+* Exchange Rate: Taking care of the exchange rate of our country by maintaining the interest rate, keeping relations with Canada and United States and by keeping public spending moderate and maintaining good debt levels. (Rodríguez, 2023).
+* Population Density: Keep low rates of growth in population, we noticed that if population increases, investment decreases.
+
+So, these are the things we have to take care about in order to increase financing in our country and give better opportunities for our people.
+
+## Bibliography
+
+* Shih, Willy. (September-October 2020). "Global Supply Chains ina Post-Pandemic World": Harvard Business Review.
+* Lázaro, E. (2022). *¿Qué es el nearshoring?.* El Economista. https://www.eleconomista.com.mx/empresas/Que-es-el-nearshoring-20221108-0093.html
+* Secretaría de Economía (2023). *Inversión Extranjera Directa.* Secretaría de Economía.
+* Rodríguez, J. (2023). *¿QUÉ SOSTIENE EL VALOR DEL PESO MEXICANO?*. IPADE Business School. https://www.ipade.mx/2023/02/17/que-sostiene-el-valor-del-peso-mexicano/
